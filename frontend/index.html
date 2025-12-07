@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Common Lisp REPL</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 {
+            color: #4ec9b0;
+            text-align: center;
+        }
+        .container {
+            background-color: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        button {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #1177bb;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+        }
+        .success {
+            color: #4ec9b0;
+        }
+        .error {
+            color: #f48771;
+        }
+        .example {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #858585;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 Online Common Lisp REPL</h1>
+    
+    <div class="container">
+        <label for="code"><strong>Wprowadź kod Common Lisp:</strong></label>
+        <textarea id="code" placeholder="(+ 1 2 3)">; Przykład: oblicz sumę
+(+ 1 2 3)</textarea>
+        
+        <button onclick="evaluateCode()">▶ Wykonaj</button>
+        
+        <div class="example">
+            <strong>Przykłady:</strong><br>
+            • <code>(* 6 7)</code> - mnożenie<br>
+            • <code>(defun hello (name) (format nil "Hello, ~A!" name))</code> - definicja funkcji<br>
+            • <code>(hello "World")</code> - wywołanie funkcji
+        </div>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Zmień URL na adres twojego backendu
+        // W docker-compose będzie to 'http://backend:8080/eval'
+        // Lokalnie: 'http://localhost:8080/eval'
+        const BACKEND_URL = 'http://localhost:8080/eval';
+
+        async function evaluateCode() {
+            const code = document.getElementById('code').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!code.trim()) {
+                resultDiv.innerHTML = '<span class="error">Proszę wprowadzić kod!</span>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<span style="color: #858585;">Wykonywanie...</span>';
+            
+            try {
+                const response = await fetch(BACKEND_URL + '?code=' + encodeURIComponent(code), {
+                    method: 'GET',
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = '<span class="success">✓ Wynik:</span><br>' + 
+                                        escapeHtml(data.result);
+                } else {
+                    resultDiv.innerHTML = '<span class="error">✗ Błąd:</span><br>' + 
+                                        escapeHtml(data.message);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">✗ Błąd połączenia:</span><br>' + 
+                                    escapeHtml(error.message) +
+                                    '<br><br><em>Upewnij się, że backend działa na ' + BACKEND_URL + '</em>';
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Obsługa Enter z Ctrl/Cmd
+        document.getElementById('code').addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                evaluateCode();
+            }
+        });
+    </script>
+</body>
+</html>
