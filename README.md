@@ -108,3 +108,64 @@ podpisuje swoim kluczem prywatnym. GitHub następnie weryfikuje podpis używają
 przechowywanego klucza publicznego. Jeśli weryfikacja się powiedzie,
 uwierzytelnienie jest udane, a sam klucz prywatny nigdy nie jest przesyłany
 przez sieć, co znacząco zwiększa bezpieczeństwo połączenia.
+
+## Docker
+
+### Czym jest konteneryzacja?
+
+Konteneryzacja to metoda pakowania aplikacji wraz ze wszystkimi zależnościami w
+izolowane jednostki zwane kontenerami. Kontener zawiera aplikację, biblioteki,
+konfigurację i wszystko, co potrzebne do uruchomienia, niezależnie od
+środowiska. Główne zalety konteneryzacji to przenośność (kontener działa tak samo
+na różnych środowiskach), izolacja (kontenery nie kolidują ze sobą), możliwość
+wersjonowania oraz łatwość skalowania aplikacji.
+
+### Dockerfile backendu
+
+```dockerfile
+FROM clfoundation/sbcl:latest
+
+WORKDIR /app
+
+RUN curl -O https://beta.quicklisp.org/quicklisp.lisp && \
+    sbcl --non-interactive \
+         --load quicklisp.lisp \
+         --eval '(quicklisp-quickstart:install :path "/root/quicklisp/")' \
+         --quit && \
+    echo '(load "/root/quicklisp/setup.lisp")' > /root/.sbclrc && \
+    rm quicklisp.lisp
+
+RUN sbcl --non-interactive \
+         --eval '(quicklisp:quickload :hunchentoot)' \
+         --eval '(quicklispl:quickload :cl-json)' \
+         --quit
+
+COPY server.lisp /app/
+
+EXPOSE 8080
+
+CMD ["sbcl", "--load", "server.lisp"]
+```
+
+Dockerfile rozpoczyna się od obrazu bazowego zawierającego SBCL (Steel Bank
+Common Lisp) i ustawia katalog roboczy na `/app`. Następnie pobiera Quicklisp -
+menedżer pakietów dla Common Lisp, konfigurując go do automatycznego ładowania
+przy starcie SBCL poprzez plik `.sbclrc`. Kolejny krok pre-instaluje wymagane
+biblioteki (Hunchentoot jako serwer HTTP i cl-json do obsługi JSON) podczas
+budowania obrazu. Instrukcja `COPY` kopiuje kod serwera do kontenera, a
+`EXPOSE` dokumentuje port 8080. Komenda `CMD` uruchamia SBCL z plikiem serwera
+przy starcie kontenera.
+
+### Dockerfile frontendu
+
+```dockerfile
+FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/
+EXPOSE 80
+```
+
+Dockerfile frontendu wykorzystuje lekki obraz Nginx oparty na Alpine Linux i
+kopiuje plik HTML do standardowego katalogu, z którego Nginx serwuje pliki
+statyczne. Instrukcja `EXPOSE` dokumentuje port 80 jako punkt dostępu HTTP.
+Komenda uruchamiająca Nginx jest dziedziczona z obrazu bazowego i nie wymaga
+jawnej definicji.
