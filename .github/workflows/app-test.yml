@@ -1,0 +1,92 @@
+name: Application Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Install SBCL
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sbcl curl
+        
+    - name: Install Quicklisp
+      run: |
+        curl -O https://beta.quicklisp.org/quicklisp.lisp
+        sbcl --non-interactive \
+             --load quicklisp.lisp \
+             --eval '(quicklisp-quickstart:install :path "/home/runner/quicklisp/")' \
+             --quit
+        echo '(load "/home/runner/quicklisp/setup.lisp")' > ~/.sbclrc
+        
+    - name: Check Lisp syntax
+      run: |
+        cd backend
+        sbcl --non-interactive \
+             --eval '(ql:quickload :hunchentoot)' \
+             --eval '(ql:quickload :cl-json)' \
+             --load server.lisp \
+             --eval '(format t "~%✓ Lisp syntax check passed!~%")' \
+             --quit || exit 1
+
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Start application with docker-compose
+      run: |
+        docker compose up -d
+        
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for backend to be ready..."
+        timeout 60 bash -c 'until curl --silent --fail http://localhost:8080/health; do sleep 2; done'
+        echo "✓ Backend is ready!"
+        
+        echo "Waiting for frontend to be ready..."
+        timeout 30 bash -c 'until curl --silent --fail http://localhost:8081; do sleep 2; done'
+        echo "✓ Frontend is ready!"
+        
+    - name: Test backend API
+      run: |
+        echo "Testing /health endpoint..."
+        curl --fail http://localhost:8080/health
+        
+        echo "Testing /eval endpoint..."
+        response=$(curl --fail 'http://localhost:8080/eval?code=%28%2B%201%202%203%29')
+        echo "Response: $response"
+        
+        if echo "$response" | grep -q '"status":"success"'; then
+          echo "✓ Backend API test passed!"
+        else
+          echo "✗ Backend API test failed!"
+          exit 1
+        fi
+        
+    - name: Test frontend
+      run: |
+        echo "Testing frontend..."
+        curl --fail http://localhost:8081 | grep -q "Common Lisp REPL"
+        echo "✓ Frontend test passed!"
+        
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        docker compose logs
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        docker compose down

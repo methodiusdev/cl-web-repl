@@ -169,3 +169,86 @@ kopiuje plik HTML do standardowego katalogu, z którego Nginx serwuje pliki
 statyczne. Instrukcja `EXPOSE` dokumentuje port 80 jako punkt dostępu HTTP.
 Komenda uruchamiająca Nginx jest dziedziczona z obrazu bazowego i nie wymaga
 jawnej definicji.
+
+## Docker Compose
+
+### Czym jest Docker Compose i po co się go stosuje?
+
+Docker Compose to narzędzie służące do definiowania i uruchamiania aplikacji
+składających się z wielu kontenerów Docker. Zamiast ręcznego budowania oraz
+uruchamiania każdego kontenera osobną komendą, Docker Compose pozwala opisać
+całą architekturę aplikacji w jednym pliku konfiguracyjnym YAML. Główne zalety
+stosowania Docker Compose to uproszczenie zarządzania wielokontenerowymi
+aplikacjami poprzez możliwość uruchomienia całego środowiska jedną komendą
+`docker compose up`, automatyczne tworzenie sieci wirtualnej umożliwiającej
+komunikację między kontenerami po nazwach serwisów oraz deklaratywne podejście
+do konfiguracji, które ułatwia wersjonowanie i współdzielenie środowiska między
+członkami zespołu.
+
+### docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lisp-backend
+    ports:
+      - "8080:8080"
+    networks:
+      - lisp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lisp-frontend
+    ports:
+      - "8081:80"
+    networks:
+      - lisp-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  lisp-network:
+    driver: bridge
+```
+
+Sekcja `version` określa wersję składni pliku Docker Compose, która wpływa na
+dostępne funkcjonalności.
+
+Sekcja `services` definiuje kontenery, które będą uruchomione jako część
+aplikacji. Każdy serwis reprezentuje osobny kontener z własną konfiguracją.
+
+W ramach serwisu `backend` sekcja build wskazuje katalog zawierający Dockerfile
+oraz kontekst budowania obrazu. Parametr `container_name` nadaje kontenerowi
+konkretną nazwę ułatwiającą identyfikację. Sekcja `ports` mapuje port 8080
+kontenera na port 8080 hosta, umożliwiając dostęp do backendu z przeglądarki.
+Parametr `networks` przypisuje kontener do sieci wirtualnej `lisp-network`,
+dzięki czemu może komunikować się z innymi kontenerami w tej samej sieci. Sekcja
+`healthcheck` definiuje automatyczne sprawdzanie czy kontener działa poprawnie
+poprzez wykonywanie zapytań do endpointu `/health` co 30 sekund. Parametr
+restart: `unless-stopped` zapewnia automatyczne ponowne uruchomienie kontenera w
+przypadku awarii, chyba że został ręcznie zatrzymany.
+
+Serwis `frontend` ma analogiczną konfigurację z tą różnicą, że mapuje port 80
+kontenera (na którym działa Nginx) na port 8081 hosta. Parametr `depends_on`
+określa zależność od backendu, co powoduje że frontend uruchomi się dopiero po
+wystartowaniu kontenera backendu.
+
+Sekcja `networks` definiuje własną sieć wirtualną o nazwie `lisp-network`
+używającą sterownika `bridge`. Kontenery podłączone do tej samej sieci mogą
+komunikować się ze sobą używając nazw serwisów jako nazw hostów, co eliminuje
+potrzebę znajomości adresów IP i upraszcza konfigurację.
